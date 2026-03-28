@@ -1,28 +1,408 @@
-p03"}
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Mima Kids</title>
-
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #fff5fa;
+      color: #222;
+    }
+    .wrap {
+      max-width: 480px;
+      margin: 0 auto;
+      min-height: 100vh;
+      padding-bottom: 80px;
+    }
+    .header {
+      background: linear-gradient(135deg, #e91e8c, #a0106a);
+      color: white;
+      padding: 20px;
+      text-align: center;
+      font-weight: bold;
+      font-size: 28px;
+    }
+    .sub {
+      font-size: 12px;
+      opacity: 0.9;
+      margin-top: 4px;
+      letter-spacing: 1px;
+    }
+    .content {
+      padding: 16px;
+    }
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 14px;
+      margin-bottom: 12px;
+      box-shadow: 0 2px 10px rgba(233, 30, 140, 0.08);
+    }
+    .title {
+      color: #e91e8c;
+      font-size: 20px;
+      font-weight: bold;
+      margin-bottom: 12px;
+    }
+    input, select, button {
+      width: 100%;
+      box-sizing: border-box;
+      margin-top: 8px;
+      margin-bottom: 8px;
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid #f2bfd8;
+      font-size: 14px;
+    }
+    button {
+      background: #e91e8c;
+      color: white;
+      border: none;
+      font-weight: bold;
+    }
+    .secondary {
+      background: white;
+      color: #e91e8c;
+      border: 2px solid #e91e8c;
+    }
+    .kpis {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .kpi {
+      border-radius: 14px;
+      padding: 12px;
+      text-align: center;
+      background: #fff0f5;
+    }
+    .kpi strong {
+      display: block;
+      font-size: 18px;
+      margin-top: 4px;
+    }
+    .item {
+      border-top: 1px solid #f3d7e5;
+      padding: 10px 0;
+    }
+    .small {
+      font-size: 12px;
+      color: #666;
+    }
+    .tabs {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      max-width: 480px;
+      margin: 0 auto;
+      display: flex;
+      background: white;
+      border-top: 1px solid #f2bfd8;
+    }
+    .tab {
+      flex: 1;
+      padding: 12px 8px;
+      text-align: center;
+      cursor: pointer;
+      font-size: 12px;
+      color: #999;
+      background: white;
+      border: none;
+    }
+    .tab.active {
+      color: #e91e8c;
+      font-weight: bold;
+      border-top: 3px solid #e91e8c;
+    }
+    .hidden {
+      display: none;
+    }
+    .danger {
+      background: #c62828;
+    }
+  </style>
 </head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      🛍️ Mima Kids
+      <div class="sub">Gestão da Loja</div>
+    </div>
+    <div class="content" id="app"></div>
+  </div>
 
-<body style="text-align:center; padding:40px; font-family:sans-serif;">
-  <h1>🛍️ Mima Kids</h1>
-  <p>Se aparecer isso, deu certo 😎</p>
+  <div class="tabs hidden" id="tabs">
+    <button class="tab active" onclick="setTab('dash')" id="tab-dash">📈<br>Dashboard</button>
+    <button class="tab" onclick="setTab('estoque')" id="tab-estoque">📦<br>Estoque</button>
+    <button class="tab" onclick="setTab('gastos')" id="tab-gastos">💸<br>Gastos</button>
+    <button class="tab" onclick="setTab('vendas')" id="tab-vendas">💰<br>Vendas</button>
+  </div>
 
   <script>
     const firebaseConfig = {
       apiKey: "AIzaSyDlrPfnASWONPdkLNSy7E4xBb6OgbfrSno",
       authDomain: "mima-kids.firebaseapp.com",
-      projectId: "mima-kids"
+      projectId: "mima-kids",
+      storageBucket: "mima-kids.firebasestorage.app",
+      messagingSenderId: "784372665863",
+      appId: "1:784372665863:web:2b3d37d384a7bab62a64a2"
     };
 
     firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
 
-    document.body.innerHTML += "<h2>🔥 App funcionando!</h2>";
+    let currentUser = null;
+    let currentTab = "dash";
+    let estoque = [];
+    let gastos = [];
+    let vendas = [];
+
+    function formatBRL(v) {
+      return Number(v || 0).toLocaleString("pt-BR", {
+        style: "currency",
+        currency: "BRL"
+      });
+    }
+
+    function setTab(tab) {
+      currentTab = tab;
+      document.querySelectorAll(".tab").forEach(el => el.classList.remove("active"));
+      document.getElementById("tab-" + tab).classList.add("active");
+      renderApp();
+    }
+
+    function renderLogin() {
+      document.getElementById("tabs").classList.add("hidden");
+      document.getElementById("app").innerHTML = `
+        <div class="card">
+          <div class="title">Entrar</div>
+          <input id="email" type="email" placeholder="Seu email" />
+          <input id="senha" type="password" placeholder="Sua senha" />
+          <button onclick="login()">Entrar</button>
+          <button class="secondary" onclick="cadastro()">Criar usuário</button>
+          <div class="small">Use teu email e senha. Depois tu pode criar os dos funcionários.</div>
+        </div>
+      `;
+    }
+
+    async function login() {
+      const email = document.getElementById("email").value.trim();
+      const senha = document.getElementById("senha").value.trim();
+      try {
+        await auth.signInWithEmailAndPassword(email, senha);
+      } catch (e) {
+        alert("Erro ao entrar: " + e.message);
+      }
+    }
+
+    async function cadastro() {
+      const email = document.getElementById("email").value.trim();
+      const senha = document.getElementById("senha").value.trim();
+      try {
+        await auth.createUserWithEmailAndPassword(email, senha);
+      } catch (e) {
+        alert("Erro ao criar usuário: " + e.message);
+      }
+    }
+
+    async function logout() {
+      await auth.signOut();
+    }
+
+    async function carregarDados() {
+      const uid = currentUser.uid;
+
+      const estSnap = await db.collection("users").doc(uid).collection("estoque").get();
+      estoque = estSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      const gasSnap = await db.collection("users").doc(uid).collection("gastos").get();
+      gastos = gasSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      const venSnap = await db.collection("users").doc(uid).collection("vendas").get();
+      vendas = venSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      renderApp();
+    }
+
+    function renderApp() {
+      if (!currentUser) return renderLogin();
+
+      document.getElementById("tabs").classList.remove("hidden");
+
+      if (currentTab === "dash") renderDashboard();
+      if (currentTab === "estoque") renderEstoque();
+      if (currentTab === "gastos") renderGastos();
+      if (currentTab === "vendas") renderVendas();
+    }
+
+    function renderDashboard() {
+      const totalVendas = vendas.reduce((s, v) => s + Number(v.total || 0), 0);
+      const totalGastos = gastos.reduce((s, g) => s + Number(g.valor || 0), 0);
+      const lucro = totalVendas - totalGastos;
+
+      document.getElementById("app").innerHTML = `
+        <div class="card">
+          <div class="title">Dashboard</div>
+          <div class="kpis">
+            <div class="kpi">Vendas<strong>${formatBRL(totalVendas)}</strong></div>
+            <div class="kpi">Gastos<strong>${formatBRL(totalGastos)}</strong></div>
+            <div class="kpi">Lucro<strong>${formatBRL(lucro)}</strong></div>
+            <div class="kpi">Produtos<strong>${estoque.length}</strong></div>
+          </div>
+        </div>
+        <div class="card">
+          <button class="secondary" onclick="logout()">Sair</button>
+        </div>
+      `;
+    }
+
+    function renderEstoque() {
+      document.getElementById("app").innerHTML = `
+        <div class="card">
+          <div class="title">Estoque</div>
+          <input id="e_produto" placeholder="Produto" />
+          <input id="e_categoria" placeholder="Categoria" />
+          <input id="e_tamanho" placeholder="Tamanho" />
+          <input id="e_cor" placeholder="Cor" />
+          <input id="e_custo" type="number" placeholder="Preço custo" />
+          <input id="e_venda" type="number" placeholder="Preço venda" />
+          <input id="e_qtd" type="number" placeholder="Quantidade" />
+          <button onclick="addEstoque()">Salvar produto</button>
+        </div>
+
+        <div class="card">
+          ${estoque.length ? estoque.map(i => `
+            <div class="item">
+              <strong>${i.produto || ""}</strong><br>
+              <span class="small">${i.categoria || ""} · ${i.tamanho || ""} · ${i.cor || ""}</span><br>
+              <span class="small">Qtd: ${i.qtd || 0} · Venda: ${formatBRL(i.venda || 0)}</span><br>
+              <button class="danger" onclick="delEstoque('${i.id}')">Excluir</button>
+            </div>
+          `).join("") : "<div class='small'>Nenhum produto cadastrado.</div>"}
+        </div>
+      `;
+    }
+
+    async function addEstoque() {
+      const item = {
+        produto: document.getElementById("e_produto").value,
+        categoria: document.getElementById("e_categoria").value,
+        tamanho: document.getElementById("e_tamanho").value,
+        cor: document.getElementById("e_cor").value,
+        custo: Number(document.getElementById("e_custo").value || 0),
+        venda: Number(document.getElementById("e_venda").value || 0),
+        qtd: Number(document.getElementById("e_qtd").value || 0)
+      };
+      await db.collection("users").doc(currentUser.uid).collection("estoque").add(item);
+      carregarDados();
+    }
+
+    async function delEstoque(id) {
+      await db.collection("users").doc(currentUser.uid).collection("estoque").doc(id).delete();
+      carregarDados();
+    }
+
+    function renderGastos() {
+      const total = gastos.reduce((s, g) => s + Number(g.valor || 0), 0);
+
+      document.getElementById("app").innerHTML = `
+        <div class="card">
+          <div class="title">Gastos</div>
+          <input id="g_desc" placeholder="Descrição" />
+          <input id="g_categoria" placeholder="Categoria" />
+          <input id="g_valor" type="number" placeholder="Valor" />
+          <button onclick="addGasto()">Salvar gasto</button>
+        </div>
+
+        <div class="card">
+          <strong>Total: ${formatBRL(total)}</strong>
+        </div>
+
+        <div class="card">
+          ${gastos.length ? gastos.map(i => `
+            <div class="item">
+              <strong>${i.descricao || ""}</strong><br>
+              <span class="small">${i.categoria || ""} · ${formatBRL(i.valor || 0)}</span><br>
+              <button class="danger" onclick="delGasto('${i.id}')">Excluir</button>
+            </div>
+          `).join("") : "<div class='small'>Nenhum gasto cadastrado.</div>"}
+        </div>
+      `;
+    }
+
+    async function addGasto() {
+      const item = {
+        descricao: document.getElementById("g_desc").value,
+        categoria: document.getElementById("g_categoria").value,
+        valor: Number(document.getElementById("g_valor").value || 0)
+      };
+      await db.collection("users").doc(currentUser.uid).collection("gastos").add(item);
+      carregarDados();
+    }
+
+    async function delGasto(id) {
+      await db.collection("users").doc(currentUser.uid).collection("gastos").doc(id).delete();
+      carregarDados();
+    }
+
+    function renderVendas() {
+      document.getElementById("app").innerHTML = `
+        <div class="card">
+          <div class="title">Vendas</div>
+          <input id="v_produto" placeholder="Produto" />
+          <input id="v_qtd" type="number" placeholder="Quantidade" />
+          <input id="v_preco" type="number" placeholder="Preço unitário" />
+          <button onclick="addVenda()">Salvar venda</button>
+        </div>
+
+        <div class="card">
+          ${vendas.length ? vendas.map(i => `
+            <div class="item">
+              <strong>${i.produto || ""}</strong><br>
+              <span class="small">Qtd: ${i.qtd || 0} · Unitário: ${formatBRL(i.preco || 0)} · Total: ${formatBRL(i.total || 0)}</span><br>
+              <button class="danger" onclick="delVenda('${i.id}')">Excluir</button>
+            </div>
+          `).join("") : "<div class='small'>Nenhuma venda cadastrada.</div>"}
+        </div>
+      `;
+    }
+
+    async function addVenda() {
+      const qtd = Number(document.getElementById("v_qtd").value || 0);
+      const preco = Number(document.getElementById("v_preco").value || 0);
+
+      const item = {
+        produto: document.getElementById("v_produto").value,
+        qtd,
+        preco,
+        total: qtd * preco
+      };
+
+      await db.collection("users").doc(currentUser.uid).collection("vendas").add(item);
+      carregarDados();
+    }
+
+    async function delVenda(id) {
+      await db.collection("users").doc(currentUser.uid).collection("vendas").doc(id).delete();
+      carregarDados();
+    }
+
+    auth.onAuthStateChanged(async (user) => {
+      currentUser = user;
+      if (user) {
+        await carregarDados();
+      } else {
+        renderLogin();
+      }
+    });
   </script>
 </body>
-<
+</html>
